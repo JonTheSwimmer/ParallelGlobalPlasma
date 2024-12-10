@@ -274,7 +274,7 @@
             TS1 = theta_star1(itheta) 
             TS2 = theta_star2(itheta)
             A(1) = 0
-            call integrate_dlsode(1, A, R1, R2, deriv_area)
+            call integrate_ode(1, A, R1, R2, deriv_area)
             cell_volume(ir, itheta, :) = A(1) * dphi
         end do
         do itheta = Ntheta+1, 2*Ntheta
@@ -290,8 +290,8 @@
             R1 = rmax2(Nr)
             R2 = r_pole(TS2) * exp(1 - 1/cos(theta02(Nr))) / sin(theta02(Nr))**(2.d0)
             A(1) = 0
-            call integrate_dlsode(1, A, R1, R2, deriv_cap1)
-            call integrate_dlsode(1, A, 0.d0, theta02(Nr), deriv_cap2)
+            call integrate_ode(1, A, R1, R2, deriv_cap1)
+            call integrate_ode(1, A, 0.d0, theta02(Nr), deriv_cap2)
             cell_volume(Nr+1, itheta, 1) = A(1) * twopi
             cell_volume(Nr+1, 2*Ntheta+1 - itheta, 1) = cell_volume(Nr+1, itheta, 1)
         end if
@@ -326,10 +326,10 @@
     end do
 
 !   Set angular cell boundaries for photon trajectories
-    theta_step = 2.d0 / (Nk_theta)
+    theta_step = pi / (Nk_theta)
     do itheta = 1, Nk_theta
-        ktheta1(itheta) = acos(1.d0 - (itheta-1) * theta_step)
-        ktheta2(itheta) = acos(1.d0 - (itheta) * theta_step)
+        ktheta1(itheta) = theta_step * (itheta-1) 
+        ktheta2(itheta) = theta_step * (itheta) 
         Nk_phi(itheta) = min(Nk_phimax, floor(Nk_phimax * sin(0.5d0 * (ktheta1(itheta) + ktheta2(itheta))) + 1))
         phi_step = twopi / Nk_phi(itheta)
         do iphi = 1, Nk_phi(itheta)

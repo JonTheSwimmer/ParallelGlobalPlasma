@@ -39,6 +39,66 @@
     end subroutine integrate_dlsode
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!  Attempt to do an RK4 integrator so I can parallelize things
+!   Uses the RKF4(5) method to determine the adaptive step size
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    subroutine integrate_ode(Neq,X,tstart,tstop,derivs)
+    implicit none
+    integer, intent(in) :: neq
+    real*8, intent(inout) :: X(neq)
+    real*8, intent(in) :: tstart, tstop
+    external :: derivs
+    !local variables
+    real*8, dimension(neq) :: yn, yn2, yerr, k1, k2, k3, k4, k5, k6
+    real*8 :: h, h_init, err, tn
+    real*8 :: a3, a4
+    real*8 :: b31, b32, b41, b42, b43, b51, b52, b53, b54, b61, b62, b63, b64, b65
+    real*8 :: c11, c13, c14, c15, c16, c21, c23, c24, c25, c26
+    logical :: cont
+    real*8 :: prec_arr(neq), h_scale
+    tn = tstart; yn = X
+    h_init = (tstop - tstart)/8
+    a3 = 3.d0/8.d0; a4 = 1.2d1/1.3d1
+    b31 = 3.d0/3.2d1; b32 = 9.d0/3.2d1
+    b41 = 1.932d3/2.197d3; b42 = -7.2d3/2.197d3; b43 = 7.296d3/2.197d3
+    b51 = 4.39d2/2.16d2; b52 = -8.d0; b53 = 3.68d3/5.13d2; b54 = -8.45d2/4.104d3
+    b61 = -8.d0/2.7d1; b62 = 2.d0; b63 = -3.544d3/2.565d3; b64 = 1.859d3/4.104d3; b65 = -1.1d1/4.d1
+    c11 = 1.6d1/1.35d2; c13 = 6.656d3/1.2825d4
+    c14 = 2.8561d4/5.643d4; c15 = -9.d0/5.d1; c16 = 2.d0/5.5d1
+    c21 = -1.d0/3.6d2; c23 = 1.28d2/4.275d3; c24 = 2.197d3/7.524d4
+    c25 = -1.d0/5.d1; c26 = -2.d0/5.5d1
+    do while (tn .lt. tstop)
+        h = min(h_init, tstop - tn)
+        cont = .true.
+        do while (cont)
+            call derivs(neq, tn, yn, k1)
+            call derivs(neq, tn+ (h/4.d0), yn + (h/4.d0) * k1, k2)
+            call derivs(neq, tn+ h*a3, yn + h*(b31*k1 + b32*k2), k3)
+            call derivs(neq, tn + h*a4, yn + h*(b41*k1 + b42*k2 + b43*k3), k4)
+            call derivs(neq, tn + h, yn + &
+                h*(b51*k1 + b52*k2 + b53*k3 + b54*k4), k5)
+            call derivs(neq, tn + 0.5d0*h, yn + &
+                h*(b61*k1 + b62*k2 + b63*k3 + b64*k4 + b65*k5), k6)
+            yn2 = yn + h*(c11*k1 + c13*k3 + c14*k4 + c15*k5 + c16*k6)
+            yerr = h*(c21*k1 + c23*k3 + c24*k4 + c25*k5 + c26*k6)
+            !err = norm2(yerr)
+            prec_arr = tolerance * (1.d0 + abs(yn2))
+            h_scale = maxval(abs(yerr/prec_arr))
+            if (h_scale .le. 1.d0) then
+                cont = .false.
+            else
+                h = 0.9d0 * h * (h_scale)**(-0.2d0)
+            end if
+        end do
+        !h_init = min((tstop - tstart)/8, h * (h_scale)**(0.2d0))
+        tn = tn + h; yn = yn2
+        !print *, tstop - tn, maxval(abs(yerr)), yerr(9), h_scale, h
+    X = yn
+    end do
+    end subroutine integrate_ode
+    
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     subroutine jacobian
     implicit none

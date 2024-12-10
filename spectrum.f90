@@ -53,7 +53,7 @@
     weight_norm = A(1)
     do iomega = 1, Nomega
         A(1) = 0.d0
-        call integrate_dlsode(1, A, omega01(iomega), omega02(iomega), deriv_weight)
+        call integrate_ode(1, A, omega01(iomega), omega02(iomega), deriv_weight)
         spec_weights(iomega) = A(1) / weight_norm
     end do
     !set up spline for converting a uniform distribution in (0, 1) to photon spectrum
@@ -64,7 +64,7 @@
     do iomega = 2, N_ospline
         omega = 10**(log10(omega_min) + omega_step * (iomega - 1))
         spec_omega_spl(iomega) = omega
-        call integrate_dlsode(1, A, spec_omega_spl(iomega-1), spec_omega_spl(iomega), deriv_weight)
+        call integrate_ode(1, A, spec_omega_spl(iomega-1), spec_omega_spl(iomega), deriv_weight)
         spec_num_spl(iomega) = A(1)
     end do
     spec_num_spl = spec_num_spl / A(1)
@@ -130,8 +130,8 @@
     f(1) = 0.d0
     g(1) = 0.d0 
     
-    call integrate_dlsode(1, g, omega1, omega2, deriv_spec)
-    call integrate_dlsode(1, f, omega1, omega2, deriv_weight)
+    call integrate_ode(1, g, omega1, omega2, deriv_spec)
+    call integrate_ode(1, f, omega1, omega2, deriv_weight)
     omega_avg2 = g(1) / f(1)
     return
     end function omega_avg2
@@ -148,7 +148,7 @@
     !local variables
     real*8, dimension(1) :: lum_int
     lum_int = 0.d0
-    call integrate_dlsode(1, lum_int, omega1, omega2, deriv_spec)
+    call integrate_ode(1, lum_int, omega1, omega2, deriv_spec)
     lum = lum_int(1) * spec_norm  * luminosity
     return
     end function lum_total
@@ -166,7 +166,7 @@
     !local variables
     real*8, dimension(1) :: rate_int
     rate_int = 0.d0
-    call integrate_dlsode(1, rate_int, omega1, omega2, deriv_weight)
+    call integrate_ode(1, rate_int, omega1, omega2, deriv_weight)
     rate = rate_int(1) * spec_norm  * luminosity
     end function rate_total
 
