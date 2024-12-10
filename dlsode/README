@@ -1,0 +1,16 @@
+
+Instructions [from Rodrigo]
+
+1) unpack tar file
+2) issue "gfortran -c opk*.f" -> compiles source into object files
+3) then "ar -r opk.a opk*.o"  -> creates library opk.a (could have another 
+name)
+4) finally "gfortran -o main.bin main.f opk.a" -> compiles main program 
+using library
+
+Anytime you want to use the library, just add it at the end of the 
+compilation line (you must use the same compiler and architecture, 
+otherwise will need to recompile).
+
+All the additional options (which are plenty) are detailed in the 
+preamble of opkdmain.f
