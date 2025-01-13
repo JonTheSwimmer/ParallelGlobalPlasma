@@ -1,0 +1,6 @@
+This code is used to propagate photons from an emission structure through a Monte Carlo Simulation. Processing code is then used to determine equilibrium pair plasma densities in the magnetosphere.
+
+To use:
+    In the example_process folder, the parameters file is used to determine the size of the emission structure. 
+    There are sample job scripts that show how to run the MC sim (photonRun.sh),
+        as well as process the resulting photon data (processRun.sh)
