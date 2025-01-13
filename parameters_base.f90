@@ -39,13 +39,14 @@
 ! photon and plasma parameters
     real*8, parameter :: luminosity = 1.d35 !luminosity of emission structure in ergs/s
     real*8, parameter :: omega_mono = 2.d0 * m_e !energy for monochromatic photon, in units of ergs
-    real*8, parameter :: B_dip = 2.d0 !dipole magnetic moment in units of B_q
+    !real*8, parameter :: B_dip = 5.d0 !dipole magnetic moment in units of B_q
+    real*8, save :: B_dip 
     real*8, parameter :: beta_e = 0.7 !velocity of pair plasma in flux bundles
     real*8, parameter :: beta_surf = 0.2 !velocity of pair plasma after surface screening
     real*8, parameter :: omega_min = 1.5d1*keV !minimum energy in spectrum
-    real*8, parameter :: omega_max = 3.d0*m_e !max energy in spectrum
+    real*8, parameter :: omega_max = 2.5d0*m_e !max energy in spectrum
     real*8, parameter :: omega_binmin = omega_min / z_max !min energy in bins, due to gravitational redshift
-    real*8, parameter :: omega_binmax = omega_max * z_max !max energy in bins, due to gravitational blueshift
+    real*8, parameter :: omega_binmax = 3.d0*m_e !omega_max * z_max !max energy in bins, due to gravitational blueshift
     real*8, parameter :: omega_cut = 1.5d0 * m_e !energy for cutoff in spectrum
     real*8, parameter :: N_spec = 4.d0 !power law in exponential for spectrum
     integer, parameter :: Nomega = 2**7
@@ -65,6 +66,11 @@
 
 ! Integration tolerance
     real*8, parameter :: tolerance = 1.d-12
+
+! Parameters for parallel propagation
+    integer, parameter :: N_para_list = 2**11
+    integer, save :: N_threads
+    integer, parameter :: N_threadmax = 128 !max number of threads
 
     end module parameters_base
 

@@ -18,14 +18,38 @@
     real*8, dimension(Nr+1, 2*Ntheta, Nphi) :: threshold_arr, phot_highE
     real*8, dimension(Nr+1, 2, Nphi) :: surf_temp
     real*8, dimension(Nr+1, Nphi, Nomega) :: create_splits
-    real*8, dimension(Nomega) :: loss_arr, emit_arr, phot_ratio, Edot
+    real*8, dimension(Nomega) :: loss_arr, emit_arr, phot_ratio
     real*8 :: E_ploss, lfactor, beta !total erg/s of photons being converted to pairs
     real*8 :: run_time !"real" time for simuation
+    real*8, dimension(Nomega) :: Edot
     integer :: iR, iTS, iT, iW, iP, i_Omin, ifilt
     integer :: iD, batchnum
     real*8 :: a, b, c, l_tot
     character(len=8) :: num
-    logical :: combined
+    logical :: combined 
+    !input arguments
+    real*8 :: phot_cut
+    integer :: icount
+    character(len=8) :: cutval, Bval, batch, threadnum
+    icount = iargc()
+    if (icount.eq.4) then
+        call getarg(1, cutval)
+        read (cutval, '(F5.1)') phot_cut
+        print *, "cutting on ", phot_cut
+        call getarg(2, Bval)
+        read (Bval, '(F5.1)') B_dip
+        print *, "B_pole/2 = ", B_dip
+        call getarg(3, batch)
+        read (batch, '(I8)') batchnum
+        print *, "batchnum = ", batchnum
+        call getarg(4, threadnum)
+        read (threadnum, '(I8)') N_threads
+        print *, "N_threads = ", N_threads
+    else
+        write (*,*) "wrong number of arguments"
+        stop
+    end if
+    call omp_set_num_threads(N_threads)
     n_psurf = 0
     N_create = 0
     C_out = 0
@@ -33,12 +57,13 @@
     C_ann = 0
     threshold_arr = 0
     phot_highE = 0
+    E_ploss = 0
     call initialize(2)
     print *, "initialized"
-    batchnum = 810
+    !batchnum = 100
     combined = .false.
-    call load_data(1700)
-    call load_data(1800)
+    call load_data(501)
+    call load_data(601)
     !do iD = 101, 120
     !    call load_data(iD)
     !end do
@@ -59,7 +84,7 @@
         loss_arr(iW) = sum(cell_loss_split(:, :, :, iW))
         emit_arr(iW) = rate_total(omega01(iW), omega02(iW))
         phot_ratio(iW) = loss_arr(iW) / emit_arr(iW)
-        if (phot_ratio(iW) .gt. 1.d0) then
+        if (phot_ratio(iW) .gt. phot_cut) then
             ifilt = min(ifilt, iW-1)
         end if
     end do
@@ -72,16 +97,16 @@
     lfactor = (E_ploss / (sum(cell_create) * 2.d0* m_e))
     run_time = N_prop / N_emission
     !determine bin when energy > m_e c^2
-    do iR = 1, Nomega
-        if (omega_mid(iR) .lt. m_e) then
-            i_Omin = iR+1
+    do iW = 1, Nomega
+        if (omega_mid(iW) .lt. m_e) then
+            i_Omin = min(Nomega, iW+1)
         end if
     end do
     if (lfactor .lt. 1.d0) then
         print *, "energy is wrong!"
     end if
     beta = sqrt(1.d0 - lfactor**(-2.d0))
-    !normalize luminosity 
+
     do iR = 1, Nr+1
         if (iR .lt. Nr+1) then
             do iP = 1, Nphi
@@ -100,14 +125,15 @@
             a = C_ann(iR, iP)
             b = C_surf(iR, iP) + C_out(iR, iP)
             c = N_create(iR, iP)
-            n_psurf(iR, iP) = (-b + sqrt(b**2.d0+4*a*c))/(2.d0*a) !density at surface in n/R_NS**3
+            !density at surface in n/R_NS**3
+            n_psurf(iR, iP) = (-b + sqrt(b**2.d0 + 4.d0*a*c))/(2.d0*a) 
         end do
     end do
     do iR = 1, Nr+1
         do iTS = 1, 2*Ntheta
             do iP = 1, Nphi
                 if (cell_volume(iR, iTS, iP) .gt. 0) then
-                    threshold_arr(iR, iTS, iP) = threshold(iR, iTS, iP)
+                    !threshold_arr(iR, iTS, iP) = threshold(iR, iTS, iP)
                     l_tot = sum(cell_bins(iR, iTS, iP, :, :, i_Omin:))
                     phot_highE(iR, iTS, iP) = (l_tot / (c_light * cell_volume(iR, iTS, iP)))
                 end if 
@@ -129,7 +155,7 @@
     call file_open(17, trim(num)//"_C_ann.dat")
     call file_open(18, trim(num)//"_n_surf.dat")
     call file_open(19, trim(num)//"_C_out.dat")
-    call file_open(20, trim(num)//"_threshold.dat")
+    !call file_open(20, trim(num)//"_threshold.dat")
     call file_open(21, trim(num)//"_surf_temp.dat")
     call file_open(23, trim(num)//"_phot_highE.dat")
     call file_open(24, trim(num)//"_lum_ratio.dat")
@@ -148,15 +174,16 @@
         write(21, 101) surf_temp(iR, 1, :)
         write(21, 101) surf_temp(iR, 2, :)
         do iTS = 1, 2*Ntheta
-            write(20, 101) threshold_arr(iR, iTS, :)
+            !write(20, 101) threshold_arr(iR, iTS, :)
             write(23, 101) phot_highE(iR, iTS, :)
         end do
         do iP = 1, Nphi
             write(26, 101) create_splits(iR, iP, :)
         end do
     end do
-    close(15); close(16); close(17); close(18); 
-    close(19); close(20); close(21); close(23); close(26)
+    close(15); close(16); close(17); close(18)
+    close(19); close(21); close(23); close(26)
+    !close(20); 
     !summary statistics
     call file_open(22, trim(num)//"_summary_stats.dat")
     write (22, 101) "Total E_dot of gamma ann = ", E_ploss

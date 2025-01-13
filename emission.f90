@@ -11,6 +11,7 @@
     use grid
     use spectrum
     use trajectory
+    use OMP_LIB
     implicit none 
     real*8, dimension(N_espline) :: emit_Ain_spl, emit_thetain_spl, emit_thetain2_spl
     real*8, dimension(N_espline) :: emit_Aout_spl, emit_thetaout_spl, emit_thetaout2_spl
@@ -155,12 +156,14 @@
     real*8, intent(in) :: R, theta, phi, alpha, beta
     real*8, intent(out) :: eta, zeta
     real*8 :: sin_zeta
-    eta = acos((1.d0 + 3.d0 * cos(theta)**2)**(-0.5) * (cos(alpha)*sin(theta) + 2.d0*sin(alpha)*cos(beta)*cos(theta)))
+    eta = acos((1.d0 + 3.d0 * cos(theta)**2)**(-0.5) * &
+                        (cos(alpha)*sin(theta) + 2.d0*sin(alpha)*cos(beta)*cos(theta)))
     if (abs(cos(eta)) == 1) then
         zeta = 0
         return
     end if
-    zeta = acos((1.d0 + 3.d0*cos(theta)**2)**(-0.5) * (sin(alpha)*cos(beta)*sin(theta) - 2.d0*cos(alpha)*cos(theta))/sin(eta))
+    zeta = acos((1.d0 + 3.d0*cos(theta)**2)**(-0.5) * &
+                (sin(alpha)*cos(beta)*sin(theta) - 2.d0*cos(alpha)*cos(theta))/sin(eta))
     sin_zeta = sin(alpha) * sin(beta) / sin(eta)
     if (sin_zeta < 0) then
         zeta = twopi - zeta
@@ -189,28 +192,54 @@
     integer, intent(out) :: side_ind
     !local variables
     real*8 :: area
-    area = area_sum*ran2(idum)
-    if (area .lt. area_in+area_left) then
-        if (area .lt. area_in) then
-            call emit_point_in(R, theta, phi, eta, zeta)
-            side_ind = 1
+    logical :: cont 
+    cont = .true. 
+    do while (cont)
+        area = area_sum*ran2(idum)
+        if (area .lt. area_in+area_left) then
+            if (area .lt. area_in) then
+                call emit_point_in(R, theta, phi, eta, zeta)
+                side_ind = 1
+            else
+                call emit_point_left(R, theta, phi, eta, zeta)
+                side_ind = 2
+            end if
         else
-            call emit_point_left(R, theta, phi, eta, zeta)
-            side_ind = 2
+            area = area - (area_in+area_left)
+            if (area .lt. area_out) then
+                call emit_point_out(R, theta, phi, eta, zeta)
+                side_ind = 3
+            else 
+                call emit_point_right(R, theta, phi, eta, zeta)
+                side_ind = 4
+            end if
         end if
-    else
-        area = area - (area_in+area_left)
-        if (area .lt. area_out) then
-            call emit_point_out(R, theta, phi, eta, zeta)
-            side_ind = 3
-        else 
-            call emit_point_right(R, theta, phi, eta, zeta)
-            side_ind = 4
+        if (valid_emission(R, theta, phi, eta, zeta)) then
+            cont = .false.
         end if
-    end if
-    call splint(spec_num_spl, spec_omega_spl, spec_omega2_spl, N_ospline, 1.d0*ran2(idum), omega, .true.)
+    end do
+    call splint(spec_num_spl, spec_omega_spl, spec_omega2_spl, &
+                    N_ospline, 1.d0*ran2(idum), omega, .true.)
     end subroutine emit_point
 
+    function valid_emission(R, theta, phi, eta, zeta) result(check)
+    !input functions
+    real*8 :: R, theta, phi, eta, zeta 
+    !output
+    logical :: check 
+    !local variables
+    real*8 :: coord(5)
+    coord = (/R, theta, phi, eta, zeta/)
+    check = .true.
+    if (any(isnan(coord(:)))) then
+        check = .false.
+        return
+    end if
+    if ((R .lt. 1.001d0) .and. (cos(eta) .lt. 0.d0)) then 
+        check = .false.
+    end if
+    return 
+    end function valid_emission
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     subroutine emit_point_out(R, theta, phi, eta, zeta)
     ! emits a photon from the flux surface isotropically
@@ -221,7 +250,8 @@
     real*8, intent(out) :: R, theta, phi, eta, zeta
     real*8 :: alpha, beta, path_A
     path_A = area_out * ran2(idum)
-    call splint(emit_Aout_spl, emit_thetaout_spl, emit_thetaout2_spl, N_espline, path_A, theta, .true.)
+    call splint(emit_Aout_spl, emit_thetaout_spl, emit_thetaout2_spl,&
+                    N_espline, path_A, theta, .true.)
     R = (sin(theta) / sin(theta_out))**2
     alpha = acos(ran2(idum)) !outward emission
     beta = twopi * ran2(idum)
@@ -247,6 +277,7 @@
     phi = ran2(idum) * (E_phi1 - E_phi0) + E_phi0
     phi = mod(phi + twopi, twopi)
     call tan2sphere(R, theta, phi, alpha, beta, eta, zeta)
+
     return
     end subroutine emit_point_in
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -505,7 +536,7 @@
             associate (bin => cell_bins(indR, indT, indP, k_ind(1), k_ind(2), k_ind(3)))
             bin = bin + end_l - start_l 
             end associate
-            !check if photon is above single photon conversion threshold
+            !check if photon is above single photon conversion threshhold
             if (single_convert(w_start, w_end, k_start, k_end, indR, indT, indP)) then
                 cont2 = .false. 
                 stat_conv(side_ind) = stat_conv(side_ind) + 1
@@ -729,19 +760,23 @@
         if (area .lt. area_right+area_left) then
             if (area .lt. area_right) then
                 call emit_point_right(R, theta, phi, eta, zeta)
-                write(13, 101) R, theta, phi, eta, zeta
+                write(12, 101) R, theta, phi, eta, zeta
+                stat_emit(4) = stat_emit(4) + 1
             else
                 call emit_point_left(R, theta, phi, eta, zeta)
                 write(11, 101) R, theta, phi, eta, zeta
+                stat_emit(2) = stat_emit(2) + 1
             end if
         else
             area = area - (2.d0*area_left)
             if (area .lt. area_out) then
                 call emit_point_out(R, theta, phi, eta, zeta)
                 write(14, 101) R, theta, phi, eta, zeta
+                stat_emit(3) = stat_emit(3) + 1
             else
                 call emit_point_in(R, theta, phi, eta, zeta)
-                write(12, 101) R, theta, phi, eta, zeta
+                write(13, 101) R, theta, phi, eta, zeta
+                stat_emit(1) = stat_emit(1) + 1
             end if
         end if
     end do

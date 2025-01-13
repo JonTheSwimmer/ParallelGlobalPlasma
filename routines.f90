@@ -3,6 +3,7 @@
 
     module routines
     use parameters_base
+    use OMP_LIB
     implicit none
 
     contains
@@ -156,7 +157,7 @@
 
     klo=1
     khi=n
-1   if (khi-klo.gt.1) then
+    do while (khi-klo.gt.1)
         k=(khi+klo)/2
         if(xa(k).gt.x)then
             if (abscissa_increasing) then
@@ -171,8 +172,7 @@
                 khi=k
             endif
         endif
-    goto 1
-    endif
+    end do
     h=xa(khi)-xa(klo)
     if (h.eq.0.) print *, xa(khi), khi, klo
     if (h.eq.0.) pause 'bad xa input in splint'
@@ -373,12 +373,32 @@
     logical :: exist
     inquire(file=filename, exist = exist)
     if (exist) then
-        open(unit = unitnum, file = filename,Status='old', position="append", action="write")
+        open(unit = unitnum, file = filename, Status='old', position="append", action="write")
     else
         open(unit = unitnum, file = filename, status = 'new')
     endif
     return
     end subroutine file_open
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!   print a time in a nice way
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    subroutine print_time(time)
+    !input variables
+    real*8 :: time !time in seconds
+    200 format(F6.2, A8)
+    if (time .lt. 1.d3) then
+        print 200, time, " seconds"
+    else
+        time = time / 6.d1
+        if (time .lt. 1.d3) then
+            print 200, time, " minutes"
+        else
+            time = time / 6.d1
+            print 200, time, " hours."
+        end if
+    end if
+    return
+    end subroutine print_time
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     end module routines

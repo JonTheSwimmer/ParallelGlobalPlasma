@@ -414,13 +414,13 @@
     if (indR .eq. Nr+1) then !polar cap 
         dphi = twopi
         theta_max = asin(sqrt(Rmax*sin(theta02(Nr))**2.d0))
-        call integrate_dlsode(1, N1, 0.d0, theta_max, deriv_capB)
+        call integrate_ode(1, N1, 0.d0, theta_max, deriv_capB)
         !call integrate_dlsode(1, N2, 0.d0, theta_max, deriv_cap0)
-        call integrate_dlsode(1, N2, 1.d0, Rmax, deriv_cap0_r)
+        call integrate_ode(1, N2, 1.d0, Rmax, deriv_cap0_r)
     else
         dphi = twopi/Nphi
-        call integrate_dlsode(1, N1, rmax1(indR), rmax2(indR), deriv_annB)
-        call integrate_dlsode(1, N2, rmax1(indR), rmax2(indR), deriv_ann0)
+        call integrate_ode(1, N1, rmax1(indR), rmax2(indR), deriv_annB)
+        call integrate_ode(1, N2, rmax1(indR), rmax2(indR), deriv_ann0)
     end if 
     N1(1) = N1(1) * sigma_const
     N2(1) = N2(1) * sigma_ann0(beta)

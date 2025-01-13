@@ -13,6 +13,7 @@
     real*8, dimension(N_spline, N_spoints) :: r_data, psi_data, l_data, rdpsi_data, dr_data
     real*8, dimension(N_spline, N_spoints) :: r2_data, psi2_data, l2_data, rdpsi2_data, dr2_data
     real*8, dimension(N_spline) :: b_data, Rmin_data
+    real*8 :: b_var
     contains
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     function b_imp(R, eta)
@@ -43,9 +44,9 @@
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    function dpsi_dr(r, b_var)
+    function dpsi_dr(r)
     implicit none
-    real*8, intent(in) :: r, b_var
+    real*8, intent(in) :: r
     real*8  :: dpsi_dr
     dpsi_dr = (r**(-2.d0)) * ((b_var**(-2.d0)) - (r**(-2.d0))*(1.d0 - (rg/r)))**(-0.5d0)
     return 
@@ -53,20 +54,16 @@
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    function dl_dr(r, b_var)
+    function dl_dr(r)
     implicit none
-    real*8, intent(in) :: r, b_var
+    real*8, intent(in) :: r
     real*8 :: dl_dr
     
-    dl_dr = (1.d0 + (r * dpsi_dr(r, b_var))**2)**(0.5)
+    dl_dr = (1.d0 + (r * dpsi_dr(r))**2)**(0.5)
 
     return
     end function dl_dr
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! derivs in r
-! input X = [psi, l, b_var]
-! output dXdr = [dpsi, dl, 0.d0]
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     subroutine derivs_r(neq, r_in, X, dXdr)
@@ -75,18 +72,17 @@
     real*8, intent(in) :: r_in, X(neq)
     real*8, intent(out) :: dXdr(neq)
     !print *, r_in
-    dXdr(1) = dpsi_dr(r_in, X(3))
-    dXdr(2) = dl_dr(r_in, X(3))
-    dXdr(3) = 0.d0
+    dXdr(1) = dpsi_dr(r_in)
+    dXdr(2) = dl_dr(r_in)
     !print *, dXdr
     return
     end subroutine derivs_r
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     
-    function f(r, b_var)
+    function f(r)
     implicit none
-    real*8, intent(in) :: r, b_var
+    real*8, intent(in) :: r
     real*8 :: f
     f = ( (r / b_var)**(2.d0) - 1 + (rg/r)) ** (-0.5d0)
     end function f
@@ -94,19 +90,15 @@
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-    function dfdr(r, b_var)
+    function dfdr(r)
     implicit none
-    real*8, intent(in) :: r, b_var
+    real*8, intent(in) :: r
     real*8 :: dfdr
 
-    dfdr = f(r, b_var)**(3.d0) * ((rg / (2*r**2.d0)) - (r / b_var**2.d0))
+    dfdr = f(r)**(3.d0) * ((rg / (2*r**2.d0)) - (r / b_var**2.d0))
 
     end function dfdr
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-! derivs in path length l
-! X = [psi, r, b_var]
-! dXdl = [dpsi, dr, 0.d0]
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     subroutine derivs_l(neq, l_in, X, dXdl)
@@ -116,10 +108,10 @@
     real*8, intent(out) :: dXdl(neq)
     real*8 :: rdpsi
     ! X(1) = psi, X(2) = r
-    rdpsi = f(X(2), X(3)) !r dpsi/dr
+    rdpsi = f(X(2)) !r dpsi/dr
     dXdl(1) = (rdpsi / X(2)) * (1.d0 + rdpsi**(2.d0))**(-0.5d0)! dpsi/dl
     dXdl(2) = (1.d0 + rdpsi**(2.d0))**(-0.5d0)! dr/dl
-    dXdl(3) = 0.d0
+    
     return
     end subroutine derivs_l
 
@@ -130,10 +122,11 @@
     real*8, intent(in) :: b
     real*8, dimension(N_spoints), intent(out) :: psi_arr, r_arr, l_arr, rdpsi_arr, dr_arr
     real*8 :: logr_stop, logr_start, log_step, r1, r2
-    real*8 :: X(3), l_max, r_stop, r_start, l_step, dXdl(3)
+    real*8 :: X(2), l_max, r_stop, r_start, l_step, dXdl(2)
     integer :: iP
     logr_stop = log10(R_limit)
     r_stop = R_limit
+    b_var = b
     if (b == 0) then
         l_step = (r_stop - R_inner) / (N_spoints - 1)
         do iP = 1, N_spoints
@@ -147,21 +140,21 @@
     else
         if (R_min(b) < R_inner) then
             r_start = R_inner  !start spline from half of stellar radius
-            X(1) = 0.d0; X(2) = 0.d0; X(3) = b
-            call integrate_dlsode(3, X, r_start, r_stop, derivs_r)
+            X(:) = 0
+            call integrate_dlsode(2, X, r_start, r_stop, derivs_r)
             l_max = X(2)
             l_step = l_max / (N_spoints - 1)
             r_arr(1) = r_start
             
             psi_arr(1) = (pi/2.d0) - asin(b*((1 - rg/R_inner)**0.5d0)/R_inner) ; l_arr(1) = 0.d0
             dr_arr(1) = 0; rdpsi_arr(1) = 1.d0
-            X(1) = psi_arr(1); X(2) = r_arr(1); X(3) = b
+            X(1) = psi_arr(1); X(2) = r_arr(1)
             do iP = 2, N_spoints
                 l_arr(iP) = l_arr(1) + l_step * (iP - 1)
-                call integrate_dlsode(3, X, l_arr(iP - 1), l_arr(iP), derivs_l)
+                call integrate_dlsode(2, X, l_arr(iP - 1), l_arr(iP), derivs_l)
                 psi_arr(iP) = X(1)
                 r_arr(iP) = X(2)
-                call derivs_l(3, l_arr(iP), X, dXdl)
+                call derivs_l(2, l_arr(iP), X, dXdl)
                 dr_arr(iP) = dXdl(2)
                 rdpsi_arr(iP) = r_arr(iP) * dXdl(1)
             end do
@@ -170,18 +163,18 @@
             r_arr(1) = r_start * (1.d0 + dpsi**2)**0.5
             l_arr(1) = dpsi*r_start
             psi_arr(1) = dpsi
-            dr_arr(1) = dl_dr(r_arr(1), b)**(-1.d0)
-            rdpsi_arr(1) = r_arr(1) * dpsi_dr(r_arr(1), b) * dr_arr(1)
+            dr_arr(1) = dl_dr(r_arr(1))**(-1.d0)
+            rdpsi_arr(1) = r_arr(1) * dpsi_dr(r_arr(1)) * dr_arr(1)
             X(:) = 0
-            call integrate_dlsode(3, X, r_arr(1), R_limit, derivs_r)
+            call integrate_dlsode(2, X, r_arr(1), R_limit, derivs_r)
             l_max = X(2)
 
             l_step = (l_max) / (N_spoints - 1)
-            X(1) = psi_arr(1); X(2) = r_arr(1); X(3) = b
+            X(1) = psi_arr(1); X(2) = r_arr(1)
         
             do iP = 2, N_spoints
                 l_arr(iP) = l_arr(1) + l_step * (iP - 1)
-                call integrate_dlsode(3, X, l_arr(iP - 1), l_arr(iP), derivs_l)
+                call integrate_dlsode(2, X, l_arr(iP - 1), l_arr(iP), derivs_l)
                 psi_arr(iP) = X(1)
                 r_arr(iP) = X(2)
                 call derivs_l(2, l_arr(iP), X, dXdl)
@@ -199,7 +192,7 @@
     subroutine create_spline_array
     implicit none
     integer :: iB, n_crit
-    real*8 :: logb_step, b
+    real*8 :: logb_step
     real*8 :: drdl2(2), drpsidl2(2), rdpsi(2), df(2)
     b_data(1) = 0.d0
     call spline_data(b_data(1), psi_data(1, :), r_data(1, :), l_data(1, :), rdpsi_data(1, :), dr_data(1, :))
@@ -216,23 +209,22 @@
     end do
     !print *, b_data(N_spline) / b_max !should be slightly more than 1
     do iB = 2, N_spline
-        b = b_data(iB)
+        b_var = b_data(iB)
         !spline for r(l)
         call spline(l_data(iB, :), r_data(iB, :), N_spoints, dr_data(iB, 1), dr_data(iB, N_spoints), r2_data(iB, :))
         !spline for psi(l)
         call spline(l_data(iB, :), psi_data(iB, :), N_spoints, rdpsi_data(iB, 1)/r_data(iB, 1), &
                         rdpsi_data(iB, N_spoints)/r_data(iB, N_spoints), psi2_data(iB, :))
         !spline for dr(l)/dl
-        rdpsi(1) = f(r_data(iB, 1), b); rdpsi(2) = f(r_data(iB, N_spoints), b)
-        df(1) = dfdr(r_data(iB, 1), b); df(2) = dfdr(r_data(iB, N_spoints), b)
+        rdpsi(1) = f(r_data(iB, 1)); rdpsi(2) = f(r_data(iB, N_spoints))
+        df(1) = dfdr(r_data(iB, 1)); df(2) = dfdr(r_data(iB, N_spoints))
         drdl2(:) = -rdpsi(:) * (1.d0 + rdpsi(:)**2.d0)**(-2.d0) * df(:)
         call spline(l_data(iB, :), dr_data(iB, :), N_spoints, drdl2(1), drdl2(2), dr2_data(iB, :))
         !spline for rdpsi(l)/dl
         drpsidl2(:) = df(:) * (1 + rdpsi(:)**2.d0)**(-2.d0)
         call spline(l_data(iB, :), rdpsi_data(iB, :), N_spoints, drpsidl2(1), drpsidl2(2), rdpsi2_data(iB, :))
         !spline for l(r)
-        call spline(r_data(iB, :), l_data(iB, :), N_spoints, dl_dr(r_data(iB, 1), b), &
-                                        dl_dr(r_data(iB, N_spoints), b), l2_data(iB, :)) 
+        call spline(r_data(iB, :), l_data(iB, :), N_spoints, dl_dr(r_data(iB, 1)), dl_dr(r_data(iB, N_spoints)), l2_data(iB, :)) 
     end do
     end subroutine create_spline_array
 
@@ -288,8 +280,7 @@
     real*8, dimension(N_spoints) ::  r_spl, psi_spl, l_spl, dr_spl, rdpsi_spl, &
                                     r_spl2, psi_spl2, l_spl2, dr_spl2, rdpsi_spl2
     logical :: cont, abscissa_increasing
-    !initialize arrays
-    l_phot = 0.d0; coord_phot = 0.d0; k_phot = 0.d0; dk0 = 0.d0; dkn = 0.d0
+
     !initial emission direction
     k_hat(1) = cos(eta)*sin(theta)*cos(phi) + sin(eta)*(cos(zeta)*cos(theta)*cos(phi) - sin(zeta)*sin(phi))
     k_hat(2) = cos(eta)*sin(theta)*sin(phi) + sin(eta)*(cos(zeta)*cos(theta)*sin(phi) + sin(zeta)*cos(phi))
@@ -303,6 +294,7 @@
     k_phot(1, :) = k_hat(:)
 
     b = b_imp(R, eta)
+    b_var = b
     !normal vector to trajectory plane
     if (b == 0) then
         !set n_hat to theta_hat if k and r_hat are parallel
@@ -328,8 +320,8 @@
     call spline(l_spl, psi_spl, N_spoints, rdpsi_spl(1)/r_spl(1), &
                 rdpsi_spl(N_spoints)/r_spl(N_spoints), psi_spl2)
     call spline(r_spl, l_spl, N_spoints, 1/dr_spl(1), 1/dr_spl(N_spoints), l_spl2)
-    fdata(1) = f(r_spl(1), b); fdata(2) = f(r_spl(N_spoints), b)
-    df(1) = dfdr(r_spl(1), b); df(2) = dfdr(r_spl(N_spoints), b)
+    fdata(1) = f(r_spl(1)); fdata(2) = f(r_spl(N_spoints))
+    df(1) = dfdr(r_spl(1)); df(2) = dfdr(r_spl(N_spoints))
     drdl2 = -fdata * (1.d0 + fdata**2.d0)**(-2.d0) * df
     call spline(l_spl, dr_spl, N_spoints, drdl2(1), drdl2(2), dr_spl2)
     dpsidl2 = df / (1.d0 + fdata**2.d0)**(2.d0)
@@ -337,13 +329,13 @@
 
     if (R < r_spl(1)) then
         rm = R_min(b)
-        l0 = (abs(R**2.d0 - rm**2.d0))**0.5d0
+        l0 = (R**2.d0 - rm**2.d0)**0.5d0
         psi0 = l0 / rm
     else
         call splint(r_spl, l_spl, l_spl2, N_spoints, R, l0, abscissa_increasing)
         call splint(l_spl, psi_spl, psi_spl2, N_spoints, l0, psi0, abscissa_increasing)
     end if
-    if (cos(eta) < 0.d0) then
+    if (cos(eta) < 0) then
         l0 = -l0
         psi0 = -psi0
     end if
@@ -367,8 +359,8 @@
             k_phot(i2, :) = dr_spl(iL)*r2_hat(:) + rdpsi_spl(iL)*psi2_hat(:)
         end do
         !determine dk/dl at start
-        rdpsi = f(rad, b)
-        df(1) = dfdr(rad, b)
+        rdpsi = f(rad)
+        df(1) = dfdr(rad)
         dk0 = ((df(1)/(1 + rdpsi**2.d0) + rdpsi/rad)/(1+rdpsi**2.d0)) * (psi1_hat - rdpsi * r1_hat)
         !determine dk/dl at end
         dkn = ((df(1)/(1 + rdpsi**2.d0) + rdpsi/rad)/(1+rdpsi**2.d0)) * (psi2_hat - rdpsi * r2_hat)
@@ -393,12 +385,12 @@
                 coord_phot(i1, :) = rad * r1_hat(:)
                 k_phot(i1, :) = -dr_spl(iL)*r1_hat(:) + rdpsi_spl(iL)*psi1_hat(:)
                 if (iL .eq. 1) then
-                    rdpsi = f(rad, b)
-                    df(1) = dfdr(rad, b)
+                    rdpsi = f(rad)
+                    df(1) = dfdr(rad)
                     dk0 = ((df(1)/(1 + rdpsi**2.d0) + rdpsi/rad)/(1+rdpsi**2.d0)) * (psi1_hat - rdpsi * r1_hat)
                 else if (iL .eq. N_spoints) then
-                    rdpsi = f(rad, b)
-                    df(1) = dfdr(rad, b)
+                    rdpsi = f(rad)
+                    df(1) = dfdr(rad)
                     dkn = ((df(1)/(1 + rdpsi**2.d0) + rdpsi/rad)/(1+rdpsi**2.d0)) * (psi1_hat - rdpsi * r1_hat)
                 end if
 
@@ -413,12 +405,12 @@
                 call cross(r2_hat, n_hat, psi2_hat)
                 k_phot(iL, :) = dr_spl(iL)*r2_hat(:) + rdpsi_spl(iL)*psi2_hat(:)
                 if (iL .eq. 1) then
-                    rdpsi = f(rad, b)
-                    df(1) = dfdr(rad, b)
+                    rdpsi = f(rad)
+                    df(1) = dfdr(rad)
                     dk0 = ((df(1)/(1 + rdpsi**2.d0) + rdpsi/rad)/(1+rdpsi**2.d0)) * (psi2_hat - rdpsi * r2_hat)
                 else if (iL .eq. N_spoints) then
-                    rdpsi = f(rad, b)
-                    df(1) = dfdr(rad, b)
+                    rdpsi = f(rad)
+                    df(1) = dfdr(rad)
                     dkn = ((df(1)/(1 + rdpsi**2.d0) + rdpsi/rad)/(1+rdpsi**2.d0)) * (psi2_hat - rdpsi * r2_hat)
                 end if
             end do

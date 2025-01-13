@@ -158,7 +158,7 @@
             X(1) = psi_arr(1); X(2) = r_arr(1); X(3) = b
             do iP = 2, N_spoints
                 l_arr(iP) = l_arr(1) + l_step * (iP - 1)
-                call integrate_dlsode(3, X, l_arr(iP - 1), l_arr(iP), derivs_l)
+                call integrate_dlsode(2, X, l_arr(iP - 1), l_arr(iP), derivs_l)
                 psi_arr(iP) = X(1)
                 r_arr(iP) = X(2)
                 call derivs_l(3, l_arr(iP), X, dXdl)
@@ -173,7 +173,7 @@
             dr_arr(1) = dl_dr(r_arr(1), b)**(-1.d0)
             rdpsi_arr(1) = r_arr(1) * dpsi_dr(r_arr(1), b) * dr_arr(1)
             X(:) = 0
-            call integrate_dlsode(3, X, r_arr(1), R_limit, derivs_r)
+            call integrate_dlsode(2, X, r_arr(1), R_limit, derivs_r)
             l_max = X(2)
 
             l_step = (l_max) / (N_spoints - 1)
@@ -231,8 +231,7 @@
         drpsidl2(:) = df(:) * (1 + rdpsi(:)**2.d0)**(-2.d0)
         call spline(l_data(iB, :), rdpsi_data(iB, :), N_spoints, drpsidl2(1), drpsidl2(2), rdpsi2_data(iB, :))
         !spline for l(r)
-        call spline(r_data(iB, :), l_data(iB, :), N_spoints, dl_dr(r_data(iB, 1), b), &
-                                        dl_dr(r_data(iB, N_spoints), b), l2_data(iB, :)) 
+        call spline(r_data(iB, :), l_data(iB, :), N_spoints, dl_dr(r_data(iB, 1), b), dl_dr(r_data(iB, N_spoints), b), l2_data(iB, :)) 
     end do
     end subroutine create_spline_array
 
@@ -288,8 +287,7 @@
     real*8, dimension(N_spoints) ::  r_spl, psi_spl, l_spl, dr_spl, rdpsi_spl, &
                                     r_spl2, psi_spl2, l_spl2, dr_spl2, rdpsi_spl2
     logical :: cont, abscissa_increasing
-    !initialize arrays
-    l_phot = 0.d0; coord_phot = 0.d0; k_phot = 0.d0; dk0 = 0.d0; dkn = 0.d0
+
     !initial emission direction
     k_hat(1) = cos(eta)*sin(theta)*cos(phi) + sin(eta)*(cos(zeta)*cos(theta)*cos(phi) - sin(zeta)*sin(phi))
     k_hat(2) = cos(eta)*sin(theta)*sin(phi) + sin(eta)*(cos(zeta)*cos(theta)*sin(phi) + sin(zeta)*cos(phi))
@@ -337,13 +335,13 @@
 
     if (R < r_spl(1)) then
         rm = R_min(b)
-        l0 = (abs(R**2.d0 - rm**2.d0))**0.5d0
+        l0 = (R**2.d0 - rm**2.d0)**0.5d0
         psi0 = l0 / rm
     else
         call splint(r_spl, l_spl, l_spl2, N_spoints, R, l0, abscissa_increasing)
         call splint(l_spl, psi_spl, psi_spl2, N_spoints, l0, psi0, abscissa_increasing)
     end if
-    if (cos(eta) < 0.d0) then
+    if (cos(eta) < 0) then
         l0 = -l0
         psi0 = -psi0
     end if
