@@ -112,6 +112,7 @@
     sigma0 = pi * (r_elec**2.d0)
     sigma0 = sigma0 * (2.d0*theta*(cosh(theta)**(-2) + cosh(theta)**(-4) - 0.75d0 * cosh(theta)**(-6)) &
                 - sinh(theta) * (cosh(theta)**(-3) + 1.5d0 * cosh(theta)**(-5)))
+    sigma0 = sigma0 * (1.d0 - sum(k1 * k2))
     return
     end function sigma0
 
